@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import type { User, LoginRequest, SignupRequest, AuthResponse } from '~/types'
+import { api } from '~/services/api'
+import type { User, LoginRequest, SignupRequest } from '~/types'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -10,17 +11,19 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isAuthenticated: (state) => !!state.accessToken,
+    isLoggedIn: (state) => !!state.accessToken,
   },
 
   actions: {
     async login(credentials: LoginRequest): Promise<boolean> {
-      const config = useRuntimeConfig()
       try {
-        const response = await $fetch<AuthResponse>(`${config.public.apiBase}/auth/login`, {
-          method: 'POST',
-          body: credentials,
-        })
-        this.setAuth(response)
+        const response = await api.login(credentials)
+        this.setTokens(response.accessToken, response.refreshToken)
+
+        // Load user info
+        const user = await api.getCurrentUser()
+        this.user = user
+
         return true
       } catch (error) {
         console.error('Login failed:', error)
@@ -29,14 +32,10 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async signup(data: SignupRequest): Promise<boolean> {
-      const config = useRuntimeConfig()
       try {
-        const response = await $fetch<AuthResponse>(`${config.public.apiBase}/auth/signup`, {
-          method: 'POST',
-          body: data,
-        })
-        this.setAuth(response)
-        return true
+        await api.signup(data)
+        // Auto login after signup
+        return await this.login({ email: data.email, password: data.password })
       } catch (error) {
         console.error('Signup failed:', error)
         return false
@@ -44,14 +43,8 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async logout() {
-      const config = useRuntimeConfig()
       try {
-        await $fetch(`${config.public.apiBase}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-          },
-        })
+        await api.logout()
       } catch (error) {
         console.error('Logout failed:', error)
       } finally {
@@ -59,14 +52,48 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    setAuth(response: AuthResponse) {
-      this.accessToken = response.accessToken
-      this.refreshToken = response.refreshToken
-      this.user = response.user
+    async refreshTokens(): Promise<boolean> {
+      if (!this.refreshToken) return false
+
+      try {
+        const response = await api.refreshToken(this.refreshToken)
+        this.setTokens(response.accessToken, response.refreshToken)
+        return true
+      } catch (error) {
+        console.error('Token refresh failed:', error)
+        this.clearAuth()
+        return false
+      }
+    },
+
+    async loadUser() {
+      if (!this.accessToken) return
+
+      try {
+        const user = await api.getCurrentUser()
+        this.user = user
+      } catch (error) {
+        console.error('Failed to load user:', error)
+        // Token might be invalid, try refresh
+        const refreshed = await this.refreshTokens()
+        if (refreshed) {
+          try {
+            const user = await api.getCurrentUser()
+            this.user = user
+          } catch {
+            this.clearAuth()
+          }
+        }
+      }
+    },
+
+    setTokens(accessToken: string, refreshToken: string) {
+      this.accessToken = accessToken
+      this.refreshToken = refreshToken
 
       if (import.meta.client) {
-        localStorage.setItem('accessToken', response.accessToken)
-        localStorage.setItem('refreshToken', response.refreshToken)
+        localStorage.setItem('accessToken', accessToken)
+        localStorage.setItem('refreshToken', refreshToken)
       }
     },
 

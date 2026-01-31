@@ -144,6 +144,54 @@ export interface PageResponse<T> {
   size: number
 }
 
+// Token Response
+export interface TokenResponse {
+  accessToken: string
+  refreshToken: string
+  tokenType: string
+  expiresIn: number
+}
+
+// Event List Response
+export interface EventListResponse {
+  events: Event[]
+  totalElements: number
+  totalPages: number
+  currentPage: number
+}
+
+// Reservation List Response
+export interface ReservationListResponse {
+  reservations: Reservation[]
+  totalElements: number
+  totalPages: number
+  currentPage: number
+}
+
+// Participant List Response
+export interface ParticipantListResponse {
+  participants: Participant[]
+  totalElements: number
+  totalPages: number
+  currentPage: number
+}
+
+// Queue Position
+export interface QueuePosition {
+  eventId: number
+  userId: number
+  position: number
+  totalInQueue: number
+  status: QueueStatus | 'NOT_IN_QUEUE'
+  estimatedWaitTime?: number
+}
+
+// Create Payment Request
+export interface CreatePaymentRequest {
+  reservationId: number
+  method: PaymentMethod
+}
+
 // Participant (for event creator view)
 export interface Participant {
   userId: number
